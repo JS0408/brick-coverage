@@ -275,7 +275,7 @@
 
         <div class="stats">
           <div class="stat primary"><span class="k">커버리지 면적</span><span class="v" id="statArea">—</span></div>
-          <div class="stat"><span class="k">좌우 폭</span><span class="v" id="statWidth">—</span></div>
+          <div class="stat"><span class="k">좌우 폭(최대)</span><span class="v" id="statWidth">—</span></div>
           <div class="stat"><span class="k">전후 길이</span><span class="v" id="statDepth">—</span></div>
           <div class="stat"><span class="k" id="statRangeK">도달 거리</span><span class="v" id="statRange">—</span></div>
         </div>
@@ -534,7 +534,7 @@
   let FS = 11, GK = 1;
   /** 좁은 화면에서는 viewBox 자체를 작게 잡는다 — 그래야 축소 배율이 덜 극단적이고
    *  같은 캔버스 높이에서 도면이 화면을 더 채운다. */
-  const vbW = (id, wide, narrow) => (($(id).clientWidth || 9999) < 520 ? narrow : wide);
+  const vbW = (id, wide, narrow) => (innerWidth < 780 ? narrow : wide);
   function fitText(id, W) {
     const el = $(id), cw = el.clientWidth || W;
     GK = Math.min(2.7, Math.max(1, W / cw));
@@ -898,14 +898,19 @@
     $("sideView").innerHTML = g;
     $("sideSub").textContent =
       `상하 ±${f.tiltHalf}° · 격자 ${gstep < 1 ? gstep * 100 + " cm" : gstep + " m"}`;
-    return H;                                   // 후면도가 같은 높이로 맞추도록
+    // 후면도가 화면상 완전히 같은 축척으로 그리도록 기준값을 넘긴다
+    return { H, s: m.s, z0: m.z0, W, cw: $("sideView").clientWidth || W };
   }
 
   // ── 후면도 ───────────────────────────────────────────────────────────
   // 스피커 쪽에서 청취자의 등을 바라본 횡단면. 빔의 좌우 퍼짐이 머리(양쪽 귀)를
   // 감싸는지 보려는 도면이라, 자르는 위치는 커버리지 한가운데로 잡는다.
-  function drawRear(f, ear, cov, Hs) {
-    const W = vbW("rearView", 460, 500), H = Hs || 470, pad = { l: 44, r: 24, t: 26, b: 34 };
+  function drawRear(f, ear, cov, ref) {
+    // viewBox 폭을 실제 렌더 폭 비율로 잡으면 카드 여백·열 너비와 무관하게 화면 배율이
+    // 측면도와 정확히 같아진다. (CSS 열 비율만 믿으면 안쪽 여백만큼 어긋난다.)
+    const cwR = $("rearView").clientWidth || 0;
+    const W = ref && cwR ? Math.max(160, Math.round(ref.W * cwR / ref.cw)) : vbW("rearView", 460, 500);
+    const H = ref ? ref.H : 470, pad = { l: 44, r: 24, t: 26, b: 34 };
     const isCeil = MOUNTS[state.mount].id === "ceiling";
     fitText("rearView", W);
     const has = cov.pts.length > 2;
@@ -914,11 +919,25 @@
     const sx = f.axis.x < -1e-6 ? -1 : 1;                 // 보는 방향(+x / −x)에 따른 좌우
     const cut = clipAbove(sectionAtX(f, xp, sx), 0);
 
-    const P = state.person, eh = earHalf();
-    const b = cut.length ? bounds(cut) : null;
-    let y1 = Math.max(0.55, b ? Math.max(Math.abs(b.x0), Math.abs(b.x1)) * 1.15 : 0.55);
-    const z1 = Math.max(state.height, P) + 0.4;
-    const m = makeMap(W, H, pad, -y1, y1, 0, z1, { anchorBottom: true });
+    const P = state.person;
+    const eh = earHalf();
+    // 측면도와 **같은 축척·같은 높이 기준**을 그대로 받아 쓴다. 그래야 바닥·천장·귀 높이가
+    // 두 도면에서 같은 자리에 오고, 사람 크기가 같아져 ±3° 와 ±10° 를 눈으로 비교할 수 있다.
+    // 좌우는 0 을 중앙에 두고 캔버스가 담기는 만큼만 보여 준다.
+    let m;
+    if (ref) {
+      const iw = W - pad.l - pad.r, ih = H - pad.t - pad.b;
+      const X0 = -(iw / ref.s) / 2;
+      m = {
+        s: ref.s, x0: X0, x1: -X0, z0: ref.z0, z1: ref.z0 + ih / ref.s,
+        X: (x) => pad.l + (x - X0) * ref.s,
+        Y: (z) => H - pad.b - (z - ref.z0) * ref.s,
+      };
+    } else {                                              // 단독 호출 대비(측면도 없이)
+      const b = cut.length ? bounds(cut) : null;
+      const y1 = Math.max(0.55, b ? Math.max(Math.abs(b.x0), Math.abs(b.x1)) * 1.15 : 0.55);
+      m = makeMap(W, H, pad, -y1, y1, 0, Math.max(state.height, P) + 0.4, { anchorBottom: true });
+    }
     let g = "";
     const gstep = gridStep(Math.max(m.x1 - m.x0, m.z1));
     g += gridLines(m, m.x0, m.x1, 0, m.z1, gstep);
@@ -959,7 +978,7 @@
       { anchor: "middle", fill: both ? "var(--beam)" : "var(--ink-soft)", weight: 700 });
 
     // 치수 — 귀 높이에서의 좌우 폭(귀 선 아래쪽에 적어 머리와 겹치지 않게), 머리 폭
-    if (span) g += dimH(m, span[0], span[1], ear, `좌우 ${(span[1] - span[0]).toFixed(2)} m`, 26);
+    if (span) g += dimH(m, span[0], span[1], ear, `좌우 ${(span[1] - span[0]).toFixed(2)} m (이 단면)`, 26);
     g += text(m.X(m.x1) - 4, m.Y(ear) + 15, `머리 폭 ${(eh * 2 * 100).toFixed(0)} cm`, { anchor: "end", fill: "var(--person)" });
 
     $("rearView").setAttribute("viewBox", `0 0 ${W} ${H}`);
@@ -1020,7 +1039,7 @@
 
     if (cov.pts.length > 2) {
       const cb = bounds(cov.pts);
-      g += dimH(m, cb.y0, cb.y1, cb.x0 - (x1 - x0) * 0.06, `좌우 ${(cb.y1 - cb.y0).toFixed(2)} m`);
+      g += dimH(m, cb.y0, cb.y1, cb.x0 - (x1 - x0) * 0.06, `좌우 ${(cb.y1 - cb.y0).toFixed(2)} m (최대)`);
       g += dimV(m, cb.y1 + (y1 - y0) * 0.05, cb.x0, cb.x1, `전후 ${(cb.x1 - cb.x0).toFixed(2)} m`);
       g += personTop(m, (cb.y0 + cb.y1) / 2, (cb.x0 + cb.x1) / 2);
     }
@@ -1076,8 +1095,8 @@
     $("placeholder").classList.add("hidden");
     $("result").classList.remove("hidden");
 
-    const sideH = drawSide(f, ear, cov, floorCov);
-    const rear = drawRear(f, ear, cov, sideH);
+    const sideRef = drawSide(f, ear, cov, floorCov);
+    const rear = drawRear(f, ear, cov, sideRef);
     drawTop(f, cov, floorCov);
     if (has && !rear.both)
       msg.textContent += " 다만 귀 높이에서 빔의 좌우 폭이 머리 폭보다 좁아, 커버리지 한가운데에 서도 양쪽 귀가 다 들어오지는 않습니다.";
