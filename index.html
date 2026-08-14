@@ -303,6 +303,7 @@
               <span><i style="background:var(--person)"></i>청취자</span>
               <span><i style="background:var(--draw)"></i>구조체 · 치수</span>
               <span>스피커는 실치수</span>
+            <span>음압은 자유음장 이론값(반사·흡음 미고려)</span>
             </div>
           </section>
 
@@ -356,8 +357,8 @@
   // bw/bh/bd = 실제 외형 치수(m). bw 는 수평축(넓은 각)·bh 는 수직축(좁은 각) 방향이며
   // 빔은 점이 아니라 이 크기의 발음면에서 출발한다.
   const PRODUCTS = [
-    { id: "brick",     name: "브릭",     h: 10, v: 3, range: 10, bw: 0.220, bh: 0.105, bd: 0.060 },
-    { id: "brickmini", name: "브릭미니", h: 7,  v: 3, range: 10, bw: 0.128, bh: 0.066, bd: 0.030 },
+    { id: "brick",     name: "브릭",     h: 10, v: 3, range: 10, bw: 0.220, bh: 0.105, bd: 0.060, spl: 101 },
+    { id: "brickmini", name: "브릭미니", h: 7,  v: 3, range: 10, bw: 0.128, bh: 0.066, bd: 0.030, spl: 94 },
   ];
   const MOUNTS = [
     { id: "ceiling", name: "천장", hint: "0° = 바닥을 향해 수직 아래. 좌측 기울임 −, 우측 기울임 +.", unit: "° (− 좌 / + 우)", label: "천장 높이" },
@@ -508,6 +509,22 @@
       if (Math.abs(O.x + dir.x * R - xp) <= TOL) add(O.y + dir.y * R, O.z + dir.z * R); // 도달 한계면
     }
     return convexHull(pts);
+  }
+
+  /** 어떤 지점의 이론 음압(dB). 1 m 기준값에서 두 가지를 뺀다.
+   *   - 거리 감쇠: 자유음장 역제곱(거리 2배마다 −6 dB)
+   *   - 축 이탈 감쇠: 지향각(−10 dB 기준 반각) 경계에서 정확히 −10 dB 가 되도록 2차식 보간
+   *  반사·흡음·공기 흡수는 넣지 않았다. 초음파 스피커는 근거리에서 역제곱보다 완만하게
+   *  줄어드는 경향이 있어 실측이 이 값보다 높게 나올 수 있다 — 보수적인 참고값이다. */
+  function splAt(f, pt) {
+    const v = { x: pt.x - f.A.x, y: pt.y - f.A.y, z: pt.z - f.A.z };
+    const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z;
+    const d = Math.hypot(v.x, v.y, v.z), ax = dot(v, f.axis);
+    if (d < 0.05 || ax <= 0) return null;                       // 너무 가깝거나 뒤쪽
+    const aw = Math.atan2(dot(v, f.eWide), ax) * 180 / Math.PI; // 넓은 각 쪽 이탈
+    const an = Math.atan2(dot(v, f.eNarr), ax) * 180 / Math.PI; // 좁은 각 쪽 이탈
+    const r = Math.hypot(aw / f.p.h, an / f.p.v);               // 1 = 지향각 경계
+    return { db: f.p.spl - 20 * Math.log10(d) - 10 * r * r, d, r };
   }
 
   /** 다각형을 y ≥ y0 쪽만 남기고 자른다 (바닥 아래 잘라내기) */
@@ -918,7 +935,11 @@
       const lo = Math.min(ea, eb), hi = Math.max(ea, eb);
       g += `<rect x="${esc(m.X(lo))}" y="${esc(m.Y(ear) - 4)}" width="${esc((hi - lo) * m.s)}" height="8" fill="var(--beam)" opacity=".85"/>`;
       g += dimH(m, lo, hi, ear, `전후 ${(hi - lo).toFixed(2)} m`, -14);
-      g += personSide(m, (lo + hi) / 2, 0, face);
+      const pc = (lo + hi) / 2;
+      g += personSide(m, pc, 0, face);
+      const sp = splAt(f, { x: pc, y: 0, z: ear });          // 귀 위치 이론 음압
+      if (sp) g += text(m.X(pc), m.Y(ear) + 18, `귀 위치 약 ${sp.db.toFixed(0)} dB`,
+        { anchor: "middle", fill: "var(--beam)", weight: 700 });
     } else {
       g += personSide(m, isCeil ? 0.9 : Math.min(2.2, x1 - 0.8), 0, face);
     }
@@ -937,7 +958,7 @@
     $("sideView").setAttribute("viewBox", `0 0 ${W} ${H}`);
     $("sideView").innerHTML = g;
     $("sideSub").textContent =
-      `상하 ±${f.tiltHalf}° · 격자 ${gstep < 1 ? gstep * 100 + " cm" : gstep + " m"}`;
+      `상하 ±${f.tiltHalf}° · 격자 ${gstep < 1 ? gstep * 100 + " cm" : gstep + " m"} · 음압 1 m ${f.p.spl} dB 기준`;
     // 후면도가 화면상 완전히 같은 축척으로 그리도록 기준값을 넘긴다
     return { H, s: m.s, z0: m.z0, W, cw: $("sideView").clientWidth || W };
   }
