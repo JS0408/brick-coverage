@@ -748,7 +748,8 @@
   /** 설치 방향 도형 — 실제 가로:세로 비율의 직사각형을 눕히거나 세워 보여준다.
    *  넓은 각은 긴 변 방향으로 퍼지므로, 그 방향으로 벌어지는 화살표를 함께 그린다. */
   function orientGlyph(p, up) {
-    const s = SKIN[p.id], B = 52, L = 40, S = Math.max(9, L * p.bh / p.bw);
+    // 제품 선택 버튼과 같은 규칙 — 긴 변을 실제 가로 치수 비율로(브릭 40, 브릭미니 23)
+    const s = SKIN[p.id], B = 52, L = 40 * p.bw / MAX_BW, S = Math.max(7, L * p.bh / p.bw);
     const w = up ? S : L, h = up ? L : S;
     const x = (B - w) / 2, y = (B - h) / 2;
     // 초음파 트랜스듀서 배열 — 실물처럼 촘촘하게, 한 줄씩 엇갈리게(지그재그) 채운다.
