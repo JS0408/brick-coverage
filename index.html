@@ -786,7 +786,7 @@
       <rect x="${esc(-ey)}" y="${esc(-ez)}" width="${esc(2 * ey)}" height="${esc(2 * ez)}" rx="1.5"
             fill="${s.body}" stroke="${s.edge}" stroke-width="1" ${inPlane ? "" : 'stroke-dasharray="3 2"'}/>
       <rect x="${esc(-ey)}" y="${esc(ez - faceH)}" width="${esc(2 * ey)}" height="${esc(faceH)}" fill="${s.face}"/>
-    </g>` + text(cx + ey + 6, cy + 4, inPlane ? "스피커" : "스피커(뒤쪽)", { fill: "var(--ink-mid)" });
+    </g>` + text(cx + ey + 6, m.Y(f.P.z) - 6, inPlane ? "스피커" : "스피커(뒤쪽)", { fill: "var(--ink-mid)" });
   }
 
   /** 평면 도형 — 위에서 본 본체의 실치수 자국. 기기의 세 축을 바닥에 투영해 크기를 낸다.
@@ -802,10 +802,15 @@
       const fw = Math.min(ev * 0.3, 2.5);
       face = `<rect x="${esc(-eh)}" y="${esc(f.axis.x > 0 ? -ev : ev - fw)}" width="${esc(2 * eh)}" height="${esc(fw)}" fill="${s.face}"/>`;
     }
+    // 평면도는 위에서 내려다본 그림이라 자국 한가운데에 이름을 적는다.
+    // 자국이 글자보다 얇으면(축척이 작을 때) 바로 아래로 뺀다.
+    const inside = ev >= 9;
+    const label = text(cx, inside ? cy + 4 : cy + ev + 13, "스피커",
+      { anchor: "middle", fill: inside ? "var(--ink)" : "var(--ink-mid)" });
     return `<g transform="translate(${esc(cx)} ${esc(cy)})">
       <rect x="${esc(-eh)}" y="${esc(-ev)}" width="${esc(2 * eh)}" height="${esc(2 * ev)}" rx="1.5"
             fill="${s.body}" stroke="${s.edge}" stroke-width="1"/>
-      ${face}</g>`;
+      ${face}</g>` + label;
   }
 
   // ── 단면도 ───────────────────────────────────────────────────────────
@@ -892,6 +897,7 @@
     // 치수 — 설치 높이
     g += dimV(m, x0 + 0.35, 0, state.height, `${state.height.toFixed(2)} m`);
     g += speakerGlyph(m, f);
+    g += text(m.X(f.P.x) + 12, m.Y(f.P.z) - 6, "스피커", { fill: "var(--ink-mid)" });
 
     // 바닥 도달 자국(참고)
     if (floorCov.pts.length) {
@@ -982,9 +988,9 @@
     g += text(m.X(0), m.Y(P) - 26, both ? "양쪽 귀 모두 빔 안" : "귀가 빔 밖",
       { anchor: "middle", fill: both ? "var(--beam)" : "var(--ink-soft)", weight: 700 });
 
-    // 치수 — 귀 높이에서의 좌우 폭(귀 선 아래쪽에 적어 머리와 겹치지 않게), 머리 폭
+    // 치수 — 좌우 폭은 귀 선 아래, 머리 폭 표기는 귀 선 위(측면도의 '귀 높이' 표기와 같은 자리)
     if (span) g += dimH(m, span[0], span[1], ear, `좌우 ${(span[1] - span[0]).toFixed(2)} m (이 단면)`, 26);
-    g += text(m.X(m.x1) - 4, m.Y(ear) + 15, `머리 폭 ${(eh * 2 * 100).toFixed(0)} cm`, { anchor: "end", fill: "var(--person)" });
+    g += text(m.X(m.x1) - 4, m.Y(ear) - 5, `머리 폭 ${(eh * 2 * 100).toFixed(0)} cm`, { anchor: "end", fill: "var(--person)" });
 
     $("rearView").setAttribute("viewBox", `0 0 ${W} ${H}`);
     $("rearView").innerHTML = g;
