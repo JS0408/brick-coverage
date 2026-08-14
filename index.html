@@ -740,11 +740,16 @@
     const s = SKIN[p.id], B = 52, L = 40, S = Math.max(9, L * p.bh / p.bw);
     const w = up ? S : L, h = up ? L : S;
     const x = (B - w) / 2, y = (B - h) / 2;
-    const cols = up ? 3 : 7, rows = up ? 7 : 3;
+    // 초음파 트랜스듀서 배열 — 실물처럼 촘촘하게, 한 줄씩 엇갈리게(지그재그) 채운다
+    const inset = 3, gw = w - inset * 2, gh = h - inset * 2, cell = 3.2;
+    const cols = Math.max(3, Math.round(gw / cell)), rows = Math.max(2, Math.round(gh / cell));
+    const cw = gw / cols, ch = gh / rows, r = Math.min(cw, ch) * 0.31;
     let cells = "";
-    for (let i = 0; i < cols; i++)
-      for (let j = 0; j < rows; j++)
-        cells += `<circle cx="${esc(x + (w / cols) * (i + .5))}" cy="${esc(y + (h / rows) * (j + .5))}" r="1.15" fill="${s.cell}"/>`;
+    for (let j = 0; j < rows; j++) {
+      const odd = j % 2, n = odd ? cols - 1 : cols;
+      for (let i = 0; i < n; i++)
+        cells += `<circle cx="${esc(x + inset + cw * (i + (odd ? 1 : 0.5)))}" cy="${esc(y + inset + ch * (j + .5))}" r="${esc(r)}" fill="${s.cell}"/>`;
+    }
     // 넓은 각이 퍼지는 쪽(= 긴 변 방향) 표시
     const a = up
       ? `<path d="M ${B / 2} 3 l -3 4 M ${B / 2} 3 l 3 4 M ${B / 2} ${B - 3} l -3 -4 M ${B / 2} ${B - 3} l 3 -4"/>`
