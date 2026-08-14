@@ -740,15 +740,25 @@
     const s = SKIN[p.id], B = 52, L = 40, S = Math.max(9, L * p.bh / p.bw);
     const w = up ? S : L, h = up ? L : S;
     const x = (B - w) / 2, y = (B - h) / 2;
-    // 초음파 트랜스듀서 배열 — 실물처럼 촘촘하게, 한 줄씩 엇갈리게(지그재그) 채운다
+    // 초음파 트랜스듀서 배열 — 실물처럼 촘촘하게, 한 줄씩 엇갈리게(지그재그) 채운다.
+    // 세로 설치는 **가로 그림을 90° 돌린 것**이어야 하므로 엇갈리는 축도 같이 돌린다:
+    //   가로 → 가로줄이 일렬, 위아래로 반 칸씩 엇갈림
+    //   세로 → 세로줄이 일렬, 좌우로 반 칸씩 엇갈림
     const inset = 1.8, gw = w - inset * 2, gh = h - inset * 2, cell = 3;
     const cols = Math.max(3, Math.round(gw / cell)), rows = Math.max(2, Math.round(gh / cell));
     const cw = gw / cols, ch = gh / rows, r = Math.min(cw, ch) * 0.44;
+    const dot = (cx, cy) => `<circle cx="${esc(x + inset + cx)}" cy="${esc(y + inset + cy)}" r="${esc(r)}" fill="${s.cell}"/>`;
     let cells = "";
-    for (let j = 0; j < rows; j++) {
-      const odd = j % 2, n = odd ? cols - 1 : cols;
-      for (let i = 0; i < n; i++)
-        cells += `<circle cx="${esc(x + inset + cw * (i + (odd ? 1 : 0.5)))}" cy="${esc(y + inset + ch * (j + .5))}" r="${esc(r)}" fill="${s.cell}"/>`;
+    if (up) {
+      for (let i = 0; i < cols; i++) {                 // 열(세로줄)이 일렬
+        const odd = i % 2, n = odd ? rows - 1 : rows;
+        for (let j = 0; j < n; j++) cells += dot(cw * (i + .5), ch * (j + (odd ? 1 : 0.5)));
+      }
+    } else {
+      for (let j = 0; j < rows; j++) {                 // 행(가로줄)이 일렬
+        const odd = j % 2, n = odd ? cols - 1 : cols;
+        for (let i = 0; i < n; i++) cells += dot(cw * (i + (odd ? 1 : 0.5)), ch * (j + .5));
+      }
     }
     // 넓은 각이 퍼지는 쪽(= 긴 변 방향) 표시
     const a = up
