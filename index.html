@@ -198,11 +198,13 @@
   .draw-head h2 { margin: 0; font-family: var(--font-mono); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-soft); font-weight: 600; }
   .draw-head .sub { font-size: 12px; color: var(--ink-soft); }
   .draw-wrap { overflow-x: auto; }
-  svg { display: block; width: 100%; height: auto; }
+  svg { display: block; width: 100%; height: auto; margin-inline: auto; }  /* 폭을 제한한 도면은 가운데로 */
   .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 11.5px; color: var(--ink-soft); font-family: var(--font-mono); }
   .legend i { display: inline-block; width: 16px; height: 3px; vertical-align: middle; margin-right: 5px; }
 
   footer { border-top: 1px solid var(--line); padding-top: 14px; font-size: 12px; color: var(--ink-soft); display: flex; flex-direction: column; gap: 5px; }
+  /* 면책 문구는 크기는 그대로 두고 색·굵기로만 강조 */
+  footer .caution { color: var(--crit); font-weight: 700; }
   code { font-family: var(--font-mono); font-size: .93em; }
 </style>
 
@@ -336,7 +338,7 @@
 
   <footer>
     <div>지향각은 <b>−10 dB 기준</b> 반각이며, 빔을 타원뿔로 보고 유효 도달 거리 이내에서 귀 높이 평면과 만나는 영역을 커버리지로 계산합니다.</div>
-    <div>실제 도달 범위는 반사면·암소음·설치 오차에 따라 달라집니다. 현장 설계 시 참고용으로 사용하세요.</div>
+    <div class="caution">실제 도달 범위는 반사면·암소음·설치 오차에 따라 달라집니다. 현장 설계 시 참고용으로 사용하세요.</div>
   </footer>
 </div>
 
@@ -562,8 +564,9 @@
   }
 
   /** 표시 범위에 맞춰 격자 간격을 고른다 — 커버리지가 수십 cm 인 경우가 흔하다. */
-  function gridStep(span) {
-    const max = 14 / GK;                       // 글자가 커지면 눈금을 성기게
+  /** 눈금 간격 — 숫자 라벨이 겹치지 않을 만큼만 촘촘하게. iw 는 눈금이 놓일 픽셀 폭. */
+  function gridStep(span, iw) {
+    const max = Math.max(3, Math.min(14, (iw || 560) / (3.6 * FS)));
     for (const st of [0.1, 0.25, 0.5, 1, 2, 5]) if (span / st <= max) return st;
     return 10;
   }
@@ -831,7 +834,7 @@
     x0 = m.x0; x1 = m.x1;
     let g = "";
 
-    const gstep = gridStep(Math.max(x1 - x0, m.z1));
+    const gstep = gridStep(Math.max(x1 - x0, m.z1), W - pad.l - pad.r);
     g += gridLines(m, x0, x1, 0, m.z1, gstep);
 
     // 구조체 — 바닥 + 천장/벽
@@ -939,7 +942,7 @@
       m = makeMap(W, H, pad, -y1, y1, 0, Math.max(state.height, P) + 0.4, { anchorBottom: true });
     }
     let g = "";
-    const gstep = gridStep(Math.max(m.x1 - m.x0, m.z1));
+    const gstep = gridStep(Math.max(m.x1 - m.x0, m.z1), W - pad.l - pad.r);
     g += gridLines(m, m.x0, m.x1, 0, m.z1, gstep);
 
     // 구조체
@@ -989,8 +992,9 @@
   }
 
   // ── 평면도 ───────────────────────────────────────────────────────────
-  function drawTop(f, cov, floorCov) {
-    const W = vbW("topView", 1160, 620), pad = { l: 44, r: 24, t: 26, b: 34 };
+  function drawTop(f, cov, floorCov, ref) {
+    let W = vbW("topView", 1160, 620);            // 축척을 맞출 때 아래에서 다시 정해진다
+    const pad = { l: 44, r: 24, t: 26, b: 34 };
     const isCeil = MOUNTS[state.mount].id === "ceiling";
     fitText("topView", W);
     // 표시 범위는 '들리는 범위'가 기준. 바닥 자국(참고)이 훨씬 멀리 뻗는 설치에서는
@@ -1012,14 +1016,47 @@
 
     // 화면 가로 = 좌우(y), 세로 = 스피커에서 멀어지는 거리(x, 위로 갈수록 멂).
     // 넓은 각이 걸린 쪽이 화면에서도 넓게 보여야 읽는 사람이 헷갈리지 않는다.
-    // 캔버스 높이는 장면 비율을 따라간다 — 벽면처럼 앞뒤로 긴 설치에서 좌우가 수십 m 로
-    // 벌어지는 것을 막는다. (축척은 makeMap 이 가로·세로 동일하게 유지한다.)
-    const H = Math.round(Math.min(820, Math.max(360,
-      pad.t + pad.b + (W - pad.l - pad.r) * ((x1 - x0) / (y1 - y0)))));
-    const m = makeMap(W, H, pad, y0, y1, x0, x1);
+    let m, H;
+    const wrapT = $("topView").parentElement;
+    const cardT = wrapT && wrapT.closest("section");
+    // 재기 전에 지난번 제한을 모두 푼다 — auto 마진이 남아 있으면 카드가 fit-content 로
+    // 줄어든 상태에서 폭을 재게 되어 도면이 점점 작아진다.
+    if (cardT) { cardT.style.width = ""; cardT.style.maxWidth = ""; cardT.style.marginInline = ""; }
+    $("topView").style.width = "";
+    const cwT = (wrapT && wrapT.clientWidth) || $("topView").clientWidth;
+    if (ref && cwT && ref.cw) {
+      // 측면도와 **화면상 같은 축척(px/m)** 으로 그린다. 평면도는 viewBox 단위를 아예
+      // 화면 픽셀과 1:1 로 잡고, 필요한 크기만큼만 캔버스를 만들어 가운데 정렬한다 —
+      // 전폭으로 늘리면 같은 축척에서 커버리지가 한가운데 점처럼 찍힌다.
+      const P = ref.s * (ref.cw / ref.W);            // 화면 px / m
+      const wantW = Math.round(pad.l + pad.r + (y1 - y0) * P);
+      const wantH = Math.round(pad.t + pad.b + (x1 - x0) * P);
+      W = Math.round(Math.min(cwT, Math.max(Math.min(360, cwT), wantW)));
+      H = Math.round(Math.min(1150, Math.max(240, wantH)));
+      const hw = (W - pad.l - pad.r) / P, vh = (H - pad.t - pad.b) / P;
+      const X0 = -hw / 2, Z0 = (x0 + x1) / 2 - vh / 2;   // 좌우는 0 중심, 세로는 내용 중심
+      m = {
+        s: P, x0: X0, x1: -X0, z0: Z0, z1: Z0 + vh,
+        X: (x) => pad.l + (x - X0) * P,
+        Y: (z) => H - pad.b - (z - Z0) * P,
+      };
+      // 폭을 '제한'만 하면 안 된다 — box-sizing 이 content-box 라 auto 마진이 카드를
+      // fit-content 로 만들고, 그러면 SVG 의 기본 폭 300 px 에 갇혀 축척이 깨진다.
+      // 그래서 카드와 SVG 폭을 둘 다 명시한다.
+      $("topView").style.width = W + "px";
+      $("topView").style.maxWidth = "100%";
+      if (cardT) { cardT.style.width = W + "px"; cardT.style.marginInline = "auto"; }
+      FS = 11; GK = 1;                              // viewBox 1 단위 = 화면 1 px
+    } else {                                         // 축척 기준을 못 받은 경우(단독 호출)
+      H = Math.round(Math.min(820, Math.max(360,
+        pad.t + pad.b + (W - pad.l - pad.r) * ((x1 - x0) / (y1 - y0)))));
+      m = makeMap(W, H, pad, y0, y1, x0, x1);
+      $("topView").style.width = ""; $("topView").style.maxWidth = "";
+      if (cardT) { cardT.style.width = ""; cardT.style.maxWidth = ""; cardT.style.marginInline = ""; }
+    }
     y0 = m.x0; y1 = m.x1; x0 = m.z0; x1 = m.z1;
     let g = "";
-    const gstep = gridStep(Math.max(x1 - x0, y1 - y0));
+    const gstep = gridStep(Math.max(x1 - x0, y1 - y0), W - pad.l - pad.r);
     g += gridLines(m, y0, y1, x0, x1, gstep);
 
     if (!isCeil) {                                   // 벽면은 아래쪽 가로선
@@ -1035,12 +1072,13 @@
 
     // 스피커 위치 + 조사 방향
     g += speakerGlyphTop(m, f);
-    g += text(m.X(0) + 12, m.Y(0) - 12, isCeil ? "설치 위치(직하)" : "설치 위치", { fill: "var(--ink-mid)" });
+    g += text(m.X(y0) + 4, m.Y(x1) + 30, isCeil ? "· 0,0 = 설치 위치(직하)" : "· 0,0 = 설치 위치",
+      { fill: "var(--ink-mid)" });
 
     if (cov.pts.length > 2) {
       const cb = bounds(cov.pts);
-      g += dimH(m, cb.y0, cb.y1, cb.x0 - (x1 - x0) * 0.06, `좌우 ${(cb.y1 - cb.y0).toFixed(2)} m (최대)`);
-      g += dimV(m, cb.y1 + (y1 - y0) * 0.05, cb.x0, cb.x1, `전후 ${(cb.x1 - cb.x0).toFixed(2)} m`);
+      g += dimH(m, cb.y0, cb.y1, cb.x0, `좌우 ${(cb.y1 - cb.y0).toFixed(2)} m (최대)`, 30);
+      g += dimV(m, cb.y1, cb.x0, cb.x1, `전후 ${(cb.x1 - cb.x0).toFixed(2)} m`, 26);
       g += personTop(m, (cb.y0 + cb.y1) / 2, (cb.x0 + cb.x1) / 2);
     }
 
@@ -1097,7 +1135,7 @@
 
     const sideRef = drawSide(f, ear, cov, floorCov);
     const rear = drawRear(f, ear, cov, sideRef);
-    drawTop(f, cov, floorCov);
+    drawTop(f, cov, floorCov, sideRef);
     if (has && !rear.both)
       msg.textContent += " 다만 귀 높이에서 빔의 좌우 폭이 머리 폭보다 좁아, 커버리지 한가운데에 서도 양쪽 귀가 다 들어오지는 않습니다.";
 
