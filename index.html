@@ -741,9 +741,9 @@
     const w = up ? S : L, h = up ? L : S;
     const x = (B - w) / 2, y = (B - h) / 2;
     // 초음파 트랜스듀서 배열 — 실물처럼 촘촘하게, 한 줄씩 엇갈리게(지그재그) 채운다
-    const inset = 3, gw = w - inset * 2, gh = h - inset * 2, cell = 3.2;
+    const inset = 1.8, gw = w - inset * 2, gh = h - inset * 2, cell = 3;
     const cols = Math.max(3, Math.round(gw / cell)), rows = Math.max(2, Math.round(gh / cell));
-    const cw = gw / cols, ch = gh / rows, r = Math.min(cw, ch) * 0.31;
+    const cw = gw / cols, ch = gh / rows, r = Math.min(cw, ch) * 0.4;
     let cells = "";
     for (let j = 0; j < rows; j++) {
       const odd = j % 2, n = odd ? cols - 1 : cols;
