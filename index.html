@@ -303,7 +303,7 @@
               <span><i style="background:var(--person)"></i>청취자</span>
               <span><i style="background:var(--draw)"></i>구조체 · 치수</span>
               <span>스피커는 실치수</span>
-            <span>음압은 자유음장 이론값(반사·흡음 미고려)</span>
+            <span>음압 이론값 — 근거리 −3 dB / 원거리 −6 dB (거리 2배당), 반사·흡음 미고려</span>
             </div>
           </section>
 
@@ -357,8 +357,11 @@
   // bw/bh/bd = 실제 외형 치수(m). bw 는 수평축(넓은 각)·bh 는 수직축(좁은 각) 방향이며
   // 빔은 점이 아니라 이 크기의 발음면에서 출발한다.
   const PRODUCTS = [
-    { id: "brick",     name: "브릭",     h: 10, v: 3, range: 10, bw: 0.220, bh: 0.105, bd: 0.060, spl: 101 },
-    { id: "brickmini", name: "브릭미니", h: 7,  v: 3, range: 10, bw: 0.128, bh: 0.066, bd: 0.030, spl: 94 },
+    // near = 음압 감쇠가 −3 dB/거리2배 에서 −6 dB/거리2배 로 꺾이는 거리(m).
+    // 40 kHz 반송파 기준 발음면의 근거리 한계(= 면적/파장)에서 잡았다. 실측값이 생기면
+    // 이 값만 고쳐 맞추면 된다 — 계산식은 splAt() 하나뿐이다.
+    { id: "brick",     name: "브릭",     h: 10, v: 3, range: 10, bw: 0.220, bh: 0.105, bd: 0.060, spl: 101, near: 2.7 },
+    { id: "brickmini", name: "브릭미니", h: 7,  v: 3, range: 10, bw: 0.128, bh: 0.066, bd: 0.030, spl: 94,  near: 1.5 },
   ];
   const MOUNTS = [
     { id: "ceiling", name: "천장", hint: "0° = 바닥을 향해 수직 아래. 좌측 기울임 −, 우측 기울임 +.", unit: "° (− 좌 / + 우)", label: "천장 높이" },
@@ -512,10 +515,14 @@
   }
 
   /** 어떤 지점의 이론 음압(dB). 1 m 기준값에서 두 가지를 뺀다.
-   *   - 거리 감쇠: 자유음장 역제곱(거리 2배마다 −6 dB)
-   *   - 축 이탈 감쇠: 지향각(−10 dB 기준 반각) 경계에서 정확히 −10 dB 가 되도록 2차식 보간
-   *  반사·흡음·공기 흡수는 넣지 않았다. 초음파 스피커는 근거리에서 역제곱보다 완만하게
-   *  줄어드는 경향이 있어 실측이 이 값보다 높게 나올 수 있다 — 보수적인 참고값이다. */
+   *
+   *  ① 거리 감쇠 — **2구간 모델**. 초음파 스피커는 가청음이 스피커가 아니라 빔이 지나가는
+   *     경로를 따라 만들어져(가상 음원 배열), 초음파가 모여 가는 동안은 점음원이 아니라
+   *     선음원처럼 거동한다. 그래서 근거리에서는 −3 dB/거리2배, 배열이 끝나는 near 지점부터
+   *     일반 스피커처럼 −6 dB/거리2배 로 꺾인다.
+   *  ② 축 이탈 감쇠 — 지향각(−10 dB 기준 반각) 경계에서 정확히 −10 dB 가 되도록 2차식 보간.
+   *
+   *  반사·흡음·공기 흡수는 넣지 않았다. */
   function splAt(f, pt) {
     const v = { x: pt.x - f.A.x, y: pt.y - f.A.y, z: pt.z - f.A.z };
     const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z;
@@ -524,7 +531,10 @@
     const aw = Math.atan2(dot(v, f.eWide), ax) * 180 / Math.PI; // 넓은 각 쪽 이탈
     const an = Math.atan2(dot(v, f.eNarr), ax) * 180 / Math.PI; // 좁은 각 쪽 이탈
     const r = Math.hypot(aw / f.p.h, an / f.p.v);               // 1 = 지향각 경계
-    return { db: f.p.spl - 20 * Math.log10(d) - 10 * r * r, d, r };
+    const d0 = f.p.near;
+    const dist = d <= d0 ? 10 * Math.log10(d)                   // 선음원 구간
+                         : 10 * Math.log10(d0) + 20 * Math.log10(d / d0);
+    return { db: f.p.spl - dist - 10 * r * r, d, r, dist };
   }
 
   /** 다각형을 y ≥ y0 쪽만 남기고 자른다 (바닥 아래 잘라내기) */
@@ -958,7 +968,8 @@
     $("sideView").setAttribute("viewBox", `0 0 ${W} ${H}`);
     $("sideView").innerHTML = g;
     $("sideSub").textContent =
-      `상하 ±${f.tiltHalf}° · 격자 ${gstep < 1 ? gstep * 100 + " cm" : gstep + " m"} · 음압 1 m ${f.p.spl} dB 기준`;
+      `상하 ±${f.tiltHalf}° · 격자 ${gstep < 1 ? gstep * 100 + " cm" : gstep + " m"}` +
+      ` · 음압 1 m ${f.p.spl} dB · ${f.p.near} m 까지 완만`;
     // 후면도가 화면상 완전히 같은 축척으로 그리도록 기준값을 넘긴다
     return { H, s: m.s, z0: m.z0, W, cw: $("sideView").clientWidth || W };
   }
