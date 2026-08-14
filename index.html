@@ -121,9 +121,11 @@
   /* 열 높이에 맞춰 늘어나므로 sticky 는 쓰지 않는다(늘어난 요소는 어차피 붙어 있지 않는다) */
   .controls { margin: 0; padding: 18px; display: flex; flex-direction: column; gap: 18px; }  /* form 기본 아래 여백(1em) 제거 */
   .field { display: flex; flex-direction: column; gap: 8px; }
+  /* 입력 항목 이름 — 한글이 모노 폰트에서 대체 글꼴로 빠져 흐릿해 보이므로
+     본문과 같은 산세리프에 굵게, 색도 한 단계 진하게 잡는다. */
   .field > label, .field > .flabel {
-    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .12em;
-    text-transform: uppercase; color: var(--ink-soft);
+    font-family: var(--font-sans); font-size: 12px; font-weight: 700; letter-spacing: .04em;
+    color: var(--ink-mid);
   }
   .hint { font-size: 11.5px; color: var(--ink-soft); line-height: 1.5; }
   .seg { display: flex; gap: 4px; }
